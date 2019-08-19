@@ -6,7 +6,9 @@ logtype_config = json.loads(b64decode(os.environ['logTypeConfig']).decode('utf-8
 
 s247_custom_regex = re.compile(logtype_config['regex']) if 'regex' in logtype_config else None
 
-s247_ignored_fields = logtype_config['ignored_fields'] if 'ignored_fields' in logtype_config else []
+s247_ml_regex = re.compile(logtype_config['ml_regex']) if 'ml_regex' in logtype_config else None
+
+s247_ignored_fields = logtype_config['ignoredFields'] if 'ignoredFields' in logtype_config else []
 
 s247_tz = {'hrs': 0, 'mins': 0} #UTC
 
@@ -17,7 +19,7 @@ if 'unix' not in s247_datetime_format_string:
     if is_year_present is False:
         s247_datetime_format_string = s247_datetime_format_string+ ' %Y'
         
-    is_timezone_present = True if '%z' in s247_datetime_format_string else False
+    is_timezone_present = True if ('%z' in s247_datetime_format_string or 'T' in s247_datetime_format_string) else False
     if not is_timezone_present and 'timezone' in logtype_config:
         tz_value = logtype_config['timezone']
         if tz_value.startswith('+'):
@@ -102,6 +104,29 @@ def json_log_parser(lines_read, log_group):
         parsed_lines.append(formatted_line)
     return parsed_lines, log_size
 
+def ml_log_parser(lines_read, log_group):
+    removed_log_size = 0
+    parsed_lines = []
+    for line in lines_read:
+        if line['message']:
+            try:
+                ml_trace = ''
+                ml_line = line['message'].split('\n')
+                ml_data = s247_ml_regex.match(ml_line[0]).groupdict()
+                if ml_data:
+                    ml_trace =  '<NewLine>'+'<NewLine>'.join(ml_line[1:])
+                    for matcher in re.finditer(s247_custom_regex, ml_trace):
+                        log_fields = matcher.groupdict(default='-')
+                        log_fields.update(ml_data)
+                        for field_name in s247_ignored_fields:
+                            removed_log_size += len(log_fields.pop(field_name, ''))
+                        formatted_line = {'_zl_timestamp' : get_timestamp(log_fields[logtype_config['dateField']]), 's247agentuid' : log_group}
+                        formatted_line.update(log_fields)
+                        parsed_lines.append(formatted_line)
+            except Exception as e:
+                print(e)
+    return parsed_lines, removed_log_size
+
 def send_logs_to_s247(gzipped_parsed_lines, log_size):
     header_obj = {'X-DeviceKey': logtype_config['apiKey'], 'X-LogType': logtype_config['logType'],
                   'X-StreamMode' :1, 'Log-Size': log_size, 'Content-Type' : 'application/json', 'Content-Encoding' : 'gzip', 'User-Agent' : 'AWS-Lambda'
@@ -126,6 +151,9 @@ def lambda_handler(event, context):
         log_events = payload['logEvents']
         if 'jsonPath' in logtype_config:
             parsed_lines, log_size = json_log_parser(log_events, log_group)
+        elif s247_ml_regex:
+            parsed_lines, removed_log_size = ml_log_parser(lines_read, log_group)
+            log_size = sys.getsizeof(log_events) - removed_log_size
         else:
             parsed_lines, removed_log_size = parse_lines(log_events, log_group)
             log_size = sys.getsizeof(log_events) - removed_log_size
