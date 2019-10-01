@@ -152,7 +152,7 @@ def lambda_handler(event, context):
         if 'jsonPath' in logtype_config:
             parsed_lines, log_size = json_log_parser(log_events, log_group)
         elif s247_ml_regex:
-            parsed_lines, removed_log_size = ml_log_parser(lines_read, log_group)
+            parsed_lines, removed_log_size = ml_log_parser(log_events, log_group)
             log_size = sys.getsizeof(log_events) - removed_log_size
         else:
             parsed_lines, removed_log_size = parse_lines(log_events, log_group)
