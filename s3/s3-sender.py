@@ -128,7 +128,7 @@ def lambda_handler(event, context):
     try:
         response = s3.get_object(Bucket=bucket, Key=key)
         print("response received for key: {}".format(key))
-        if response['ContentType'] =='application/x-gzip' or response['ContentEncoding'] == 'gzip':
+        if response['ContentType'] =='application/x-gzip' or key.endswith('.gz'):
             lines_read = gzip.decompress(response['Body'].read())
         
         if 'jsonPath' in logtype_config:
