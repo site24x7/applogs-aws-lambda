@@ -130,6 +130,8 @@ def lambda_handler(event, context):
         print("response received for key: {}".format(key))
         if response['ContentType'] =='application/x-gzip' or key.endswith('.gz'):
             lines_read = gzip.decompress(response['Body'].read())
+        else:
+            lines_read = response['Body'].read()
         
         if 'jsonPath' in logtype_config:
             parsed_lines, log_size = json_log_parser(lines_read, bucket)
