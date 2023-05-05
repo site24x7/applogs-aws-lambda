@@ -357,7 +357,10 @@ def lambda_handler(event, context):
                 records_obj = json.loads(lines_read.decode('utf-8'))
             except Exception as e:
                 lines_read = lines_read.split(b'\n')
-                records_obj = {"Records":[json.loads(each.decode('utf-8')) for each in lines_read] }
+                records_obj = {"Records" :[]}
+                for each in lines_read:
+                    if each:
+                        records_obj["Records"].append(json.loads(each))
 
             parsed_lines, log_size = json_log_parser(records_obj, bucket)
         elif s247_ml_regex:
