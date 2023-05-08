@@ -149,8 +149,11 @@ def json_log_parser(lines_read, log_group):
     for event_obj in lines_read:
         formatted_line = {}
         json_log_size=0
+        json_keys_size = len(logtype_config['jsonPath'])
+        if json_keys_size>2 and not event_obj['message'].startswith('{'):
+            continue
         for path_obj in logtype_config['jsonPath']:
-            value = get_json_value(event_obj, path_obj['key' if 'key' in path_obj else 'name'])
+            value = get_json_value(event_obj if json_keys_size==2 else json.loads(event_obj['message']), path_obj['key' if 'key' in path_obj else 'name'])
             if value:
                 formatted_line[path_obj['name']] = value 
                 json_log_size+= len(str(value))
