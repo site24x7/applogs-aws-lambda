@@ -137,11 +137,13 @@ def is_filters_matched(formatted_line):
 
 def get_json_value(obj, key):
     if key in obj:
-        return obj[key]
+        val =  obj[key]
+        return str(val) if type(val) in [dict, list] else val
     elif '.' in key:
         parent_key = key[:key.index('.')]
         child_key = key[key.index('.')+1:]
-        return get_json_value(obj[parent_key], child_key)
+        if parent_key in obj:
+            return get_json_value(obj[parent_key], child_key)
 
 def json_log_parser(lines_read, log_group):
     global log_size
