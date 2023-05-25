@@ -128,12 +128,14 @@ def add_message_metadata(formatted_line,bucket_name):
 def is_filters_matched(formatted_line):
     if 'filterConfig' in logtype_config:
         for config in logtype_config['filterConfig']:
-            if re.findall(logtype_config['filterConfig'][config]['values'],formatted_line[config]) :
-                val = True 
-            else:
-                val = False
-            if config in formatted_line and (logtype_config['filterConfig'][config]['match'] ^ (val)):
-                return False
+            if config in formatted_line:
+                if re.findall(logtype_config['filterConfig'][config]['values'], formatted_line[config]):
+                    val = True
+                else:
+                    val = False
+
+                if (logtype_config['filterConfig'][config]['match'] ^ (val)):
+                    return False
     return True
 
 def get_json_value(obj, key):
