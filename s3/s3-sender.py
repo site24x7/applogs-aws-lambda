@@ -123,7 +123,7 @@ def parse_lines(lines_read, bucket_name):
     return parsed_lines, log_size
 
 def add_message_metadata(formatted_line,bucket_name):
-    formatted_line.update({'_zl_timestamp' : get_timestamp(formatted_line[logtype_config['dateField']]), 's247agentuid' : bucket_name})
+    formatted_line.update({'_zl_timestamp' : datetime.datetime.now().timestamp() if logtype_config['dateFormat'] == 'agent_time' else get_timestamp(formatted_line[logtype_config['dateField']]), 's247agentuid' : bucket_name})
 
 def is_filters_matched(formatted_line):
     if 'filterConfig' in logtype_config:
@@ -154,7 +154,7 @@ def json_log_parser(records_obj, bucket_name):
         json_log_size = 0
         for path_obj in logtype_config['jsonPath']:
             value = get_json_value(event_obj, path_obj['key' if 'key' in path_obj else 'name'])
-            if value:
+            if value is not None and value != '':
                 formatted_line[path_obj['name']] = value
                 json_log_size+= len(str(value))
         if not is_filters_matched(formatted_line):
