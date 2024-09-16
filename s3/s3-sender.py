@@ -11,6 +11,8 @@ s247_ignored_fields = logtype_config['ignoredFields'] if 'ignoredFields' in logt
 
 s247_tz = {'hrs': 0, 'mins': 0} #UTC
 
+config_fields = {}
+
 s247_datetime_format_string = logtype_config['dateFormat']
 s247_ml_regex = re.compile(logtype_config['ml_regex']) if 'ml_regex' in logtype_config else None
 s247_ml_end_regex = re.compile(logtype_config['ml_end_regex']) if 'ml_end_regex' in logtype_config else None
@@ -23,6 +25,8 @@ log_size = 0
 masking_config = logtype_config['maskingConfig'] if 'maskingConfig' in logtype_config else None
 hashing_config = logtype_config['hashingConfig'] if 'hashingConfig' in logtype_config else None
 derived_eval = logtype_config['derivedConfig'] if 'derivedConfig' in logtype_config else None
+config_types = logtype_config['configTypes'] if 'configTypes' in logtype_config else None
+
 
 if derived_eval:
     try:
@@ -63,6 +67,13 @@ if 'unix' not in s247_datetime_format_string:
             s247_tz['hrs'] = int('+' + tz_value[1:3])
             s247_tz['mins'] = int('+' + tz_value[3:5])
 
+def load_config_field_value(s3_file_path):
+    for field_name in config_types:
+        config_type = config_types[field_name]
+        if '@filepath' in config_type:
+            if ':' in config_type and int(config_type[10:]) < s3_file_path.count(os.sep):
+                config_fields[field_name] = s3_file_path.split(os.sep)[int(config_type[10:])]
+
 def log_line_filter(formatted_line):
     if masking_config:
         apply_masking(formatted_line)
@@ -102,7 +113,7 @@ def parse_lines(lines_read, bucket_name):
         line = line.decode('utf-8', 'ignore').strip()
         if line:
             try:
-                matcher = s247_custom_regex.search(line)               
+                matcher = s247_custom_regex.search(line)
                 if matcher:
                     log_size += len(line)
                     log_fields = matcher.groupdict(default='-')
@@ -112,7 +123,7 @@ def parse_lines(lines_read, bucket_name):
                     formatted_line.update(log_fields)
                     log_line_filter(formatted_line)
                     add_message_metadata(formatted_line,bucket_name)
-                    parsed_lines.append(formatted_line)               
+                    parsed_lines.append(formatted_line)
                 else:
                     is_date_present = s247_datetime_regex.search(line)
                     if is_date_present is None:
@@ -124,6 +135,8 @@ def parse_lines(lines_read, bucket_name):
 
 def add_message_metadata(formatted_line,bucket_name):
     formatted_line.update({'_zl_timestamp' : datetime.datetime.now().timestamp() if logtype_config['dateFormat'] == 'agent_time' else get_timestamp(formatted_line[logtype_config['dateField']]), 's247agentuid' : bucket_name})
+    if config_fields:
+        formatted_line.update(config_fields)
 
 def is_filters_matched(formatted_line):
     if 'filterConfig' in logtype_config:
@@ -159,7 +172,7 @@ def json_log_parser(records_obj, bucket_name):
                 json_log_size+= len(str(value))
         if not is_filters_matched(formatted_line):
             continue
-        log_size += json_log_size    
+        log_size += json_log_size
         log_line_filter(formatted_line)
         add_message_metadata(formatted_line,bucket_name)
         parsed_lines.append(formatted_line)
@@ -353,6 +366,9 @@ def lambda_handler(event, context):
             lines_read = gzip.decompress(response['Body'].read())
         else:
             lines_read = response['Body'].read()
+
+        if config_types:
+            load_config_field_value(key)
 
         if 'jsonPath' in logtype_config:
             try:
