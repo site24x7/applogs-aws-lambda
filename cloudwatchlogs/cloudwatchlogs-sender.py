@@ -135,7 +135,7 @@ def parse_lines(lines_read, log_group):
     return parsed_lines, log_size
 
 def add_message_metadata(formatted_line,log_group):
-    formatted_line.update({'_zl_timestamp' : datetime.datetime.now().timestamp() if logtype_config['dateFormat'] == 'agent_time' else get_timestamp(formatted_line[logtype_config['dateField']]), 's247agentuid' : log_group})
+    formatted_line.update({'_zl_timestamp' : datetime.datetime.now().timestamp() if logtype_config['dateFormat'] == 'agent_time' else get_timestamp(formatted_line[logtype_config['dateField']]), 's247agentuid' : log_group, 'account': accountId, 'region': region})
     if config_fields:
         formatted_line.update(config_fields)
 
@@ -167,11 +167,12 @@ def json_log_parser(lines_read, log_group):
     for event_obj in lines_read:
         formatted_line = {}
         json_log_size=0
-        json_keys_size = len(logtype_config['jsonPath'])
-        if json_keys_size>2 and not event_obj['message'].startswith('{'):
+        custom_fields_present = [f["name"] for f in logtype_config['jsonPath'] if f["name"] not in {"timestamp", "message", "id", "account", "region"}]
+        print("custom_fields_present:", custom_fields_present)
+        if custom_fields_present and not event_obj['message'].startswith('{'):
             continue
         for path_obj in logtype_config['jsonPath']:
-            value = get_json_value(event_obj if json_keys_size==2 else json.loads(event_obj['message']), path_obj['key' if 'key' in path_obj else 'name'])
+            value = get_json_value(event_obj if not custom_fields_present else json.loads(event_obj['message']), path_obj['key' if 'key' in path_obj else 'name'])
             if value is not None and value != '':
                 formatted_line[path_obj['name']] = value 
                 json_log_size+= len(str(value))
@@ -282,7 +283,7 @@ def ml_log_parser(lines_read, log_group):
 
 def send_logs_to_s247(gzipped_parsed_lines, log_size):
     header_obj = {'X-DeviceKey': logtype_config['apiKey'], 'X-LogType': logtype_config['logType'],
-                  'X-StreamMode' :1, 'Log-Size': log_size, 'Content-Type' : 'application/json', 'Content-Encoding' : 'gzip', 'User-Agent' : 'AWS-Lambda'
+            'X-StreamMode' :1, 'Log-Size': log_size, 'Content-Type' : 'application/json', 'Content-Encoding' : 'gzip', 'User-Agent' : 'AWS-Lambda'
     }
     upload_url = 'https://'+logtype_config['uploadDomain']+'/upload'
     request = urllib.request.Request(upload_url, headers=header_obj)
@@ -361,7 +362,7 @@ def derivedFields(formatted_line):
         traceback.print_exc()
 
 def lambda_handler(event, context):
-    global log_size
+    global log_size, accountId, region
     try:
         cw_data = event['awslogs']['data']
         compressed_payload = b64decode(cw_data)
@@ -369,6 +370,8 @@ def lambda_handler(event, context):
         payload = json.loads(uncompressed_payload)
         if config_types:
             load_config_field_value(payload)
+        region = context.invoked_function_arn.split(':')[3]
+        accountId = payload['owner'] if 'owner' in payload else context.invoked_function_arn.split(':')[4] 
         log_group = payload['logGroup']
         log_events = payload['logEvents']
         if 'jsonPath' in logtype_config:
