@@ -2,7 +2,28 @@ import sys, os, re, gzip, boto3, json, urllib.parse, urllib.request, traceback, 
 from base64 import b64decode
 
 
-logtype_config = json.loads(b64decode(os.environ['logTypeConfig']).decode('utf-8'))
+_secrets_client = boto3.client('secretsmanager')
+
+
+def _load_logtype_config_from_secrets_manager():
+    secret_arn = os.environ['SITE24X7_API_KEY_SECRET_ARN']
+    response = _secrets_client.get_secret_value(SecretId=secret_arn)
+    secret_string = response['SecretString']
+    try:
+        secret_json = json.loads(secret_string)
+        return json.loads(b64decode(secret_json['logTypeConfig']).decode('utf-8'))
+    except Exception as e:
+        raise ValueError('logTypeConfig value is not configured properly') from e
+
+
+def _load_logtype_config_from_environment():
+    if "logTypeConfig" in os.environ:
+        return json.loads(b64decode(os.environ['logTypeConfig']).decode('utf-8'))
+    else:
+        return _load_logtype_config_from_secrets_manager()
+
+
+logtype_config = _load_logtype_config_from_environment()
 
 s247_custom_regex = re.compile(logtype_config['regex']) if 'regex' in logtype_config else None
 
